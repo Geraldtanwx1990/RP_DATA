@@ -1,0 +1,153 @@
+library(ggplot2)
+library(dplyr)
+library(DT)
+library(tools)
+library(shinythemes)
+
+# Load data --------------------------------------------------------------------
+
+RawData <- read.csv(file = "https://raw.githubusercontent.com/Geraldtanwx1990/RP_DATA/main/tested.csv", header = TRUE, sep = ",")
+
+# Define UI --------------------------------------------------------------------
+
+ui <- fluidPage(
+  #title
+  titlePanel("Titanic Data"),
+  shinythemes::themeSelector(),
+  
+  sidebarLayout(
+    sidebarPanel(
+      # Y AXIS
+      selectInput(
+        inputId = "y",
+        label = "Y-axis:",
+        choices = c("Age" = "Age", "Fare" = "Fare", "Total_Family_Members" = "Total_Family_Members"),
+        selected = "Fare"
+      ),
+      # X AXIS
+      selectInput(
+        inputId = "x",
+        label = "X-axis:",
+        choices = c("Age" = "Age", "Fare" = "Fare", "Total_Family_Members" = "Total_Family_Members"),
+        selected = "Age"
+      ),
+      # COLOR AXIS
+      selectInput(
+        inputId = "z",
+        label = "Color by:",
+        choices = c("Passenger_class" = "Passenger_class", "Sex" = "Sex", "Embarked" = "Embarked", "Survivor" = "Survivor"),
+        selected = "Passenger_class"
+      ),
+      checkboxInput(inputId = "show_table", label = "Show Data Table", value = TRUE),
+      
+      # Add a button to download data
+      downloadButton("download_data", "Download Data"),
+      
+      #Download
+      radioButtons(inputId = "filetype",
+                   label = "Select filetype:",
+                   choices = c("csv", "tsv"),
+                   selected = "csv"),
+      
+      checkboxGroupInput(inputId = "selected_var",
+                         label = "Select variables:",
+                         choices = names(RawData),  # Replace with the correct data frame name
+                         selected = c("Age"))  # Replace with your desired default selection
+    ),
+    
+    mainPanel(
+      plotOutput(outputId = "scatterplot", brush = "plot_brush"),
+      dataTableOutput(outputId = "data_table"),
+      h4("Average Age and Fare by Passenger Class:"),
+      verbatimTextOutput(outputId = "average_output"),
+      h4("Correlation between Selected X and Y Variables:"),
+      verbatimTextOutput(outputId = "correlation_output"),
+      textOutput(outputId = "avg_x"), # avg of x
+      textOutput(outputId = "avg_y"), # avg of y
+      verbatimTextOutput(outputId = "lmoutput") # regression output
+    )
+  )
+)
+
+# Define server ----------------------------------------------------------------
+
+server <- function(input, output, session) {
+  output$scatterplot <- renderPlot({
+    ggplot(data = RawData, aes_string(
+      x = input$x, y = input$y,
+      color = input$z
+    )) +
+      geom_point()+  theme(legend.position = "top") # change positon of the legned
+  })
+  
+  output$data_table <- renderDataTable({
+    if (input$show_table) {
+      brushedPoints(RawData, brush = input$plot_brush) %>%
+        select(Name, Sex, Age, Embarked, Total_Family_Members, Survivor,Passenger_class)
+    }
+  })
+  
+  output$average_output <- renderText({
+    if (!is.null(input$z) && input$z == "Passenger_class") {
+      average_data <- RawData %>%
+        group_by(Passenger_class) %>%
+        summarize(Average_Age = mean(Age, na.rm = TRUE),
+                  Average_Fare = mean(Fare, na.rm = TRUE),
+                  Average_Total_Family_Members = mean(Total_Family_Members, na.rm = TRUE))
+      
+      formatted_output <- paste(
+        "\n", "First Class - Average Age:", round(average_data$Average_Age[1], 1),
+        "Average Fare:", round(average_data$Average_Fare[1], 1),
+        "Average Total Family Members:", round(average_data$Average_Total_Family_Members[1], 1), "\n",
+        "Second Class - Average Age:", round(average_data$Average_Age[2], 1),
+        "Average Fare:", round(average_data$Average_Fare[2], 1),
+        "Average Total Family Members:", round(average_data$Average_Total_Family_Members[2], 1), "\n",
+        "Third Class - Average Age:", round(average_data$Average_Age[3], 1),
+        "Average Fare:", round(average_data$Average_Fare[3], 1),
+        "Average Total Family Members:", round(average_data$Average_Total_Family_Members[3], 1)
+      )
+      
+      return(formatted_output)
+    } else {
+      "Select 'Passenger_class' as the color variable to see average Age, Fare, and Total Family Members by Passenger Class."
+    }
+  })
+  
+  output$correlation_output <- renderText({
+    if (!is.null(input$x) && !is.null(input$y)) {
+      selected_data <- RawData %>%
+        select(input$x, input$y)
+      
+      correlation <- cor(selected_data[[input$x]], selected_data[[input$y]], use = "complete.obs")
+      
+      paste("Correlation between", input$x, "and", input$y, ":", round(correlation, 1))
+    } else {
+      "Select both 'X-axis' and 'Y-axis' variables to calculate the correlation."
+    }
+  })
+  
+  output$lmoutput <- renderPrint({
+    x <- RawData %>% pull(input$x)
+    y <- RawData %>% pull(input$y)
+    print(summary(lm(y ~ x, data = RawData)), digits = 1, signif.stars = FALSE)
+  }) 
+  
+  # Download file
+  output$download_data <- downloadHandler(
+    filename = function() {
+      paste0("RawData.", input$filetype)
+    },
+    content = function(file) { 
+      if(input$filetype == "csv"){ 
+        write.csv(RawData %>% select(input$selected_var), file, row.names = FALSE) 
+      }
+      if(input$filetype == "tsv"){ 
+        write.table(RawData %>% select(input$selected_var), file, sep = "\t", row.names = FALSE) 
+      }
+    }
+  )
+}
+
+# Create a Shiny app object ----------------------------------------------------
+
+shinyApp(ui = ui, server = server)
