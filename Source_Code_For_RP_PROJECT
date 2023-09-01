@@ -43,7 +43,7 @@ ui <- fluidPage(
       # Add a button to download data
       downloadButton("download_data", "Download Data"),
       
-      #Download
+      # Download
       radioButtons(inputId = "filetype",
                    label = "Select filetype:",
                    choices = c("csv", "tsv"),
@@ -52,7 +52,16 @@ ui <- fluidPage(
       checkboxGroupInput(inputId = "selected_var",
                          label = "Select variables:",
                          choices = names(RawData),  # Replace with the correct data frame name
-                         selected = c("Age"))  # Replace with your desired default selection
+                         selected = c("Age")),  # Replace with your desired default selection,
+      
+      # Add a slider input for controlling point size
+      sliderInput(
+        inputId = "point_size",
+        label = "Point Size:",
+        min = 1,
+        max = 10,
+        value = 3
+      )
     ),
     
     mainPanel(
@@ -77,13 +86,14 @@ server <- function(input, output, session) {
       x = input$x, y = input$y,
       color = input$z
     )) +
-      geom_point()+  theme(legend.position = "top") # change positon of the legned
+      geom_point(size = input$point_size) +  # Use input$point_size for size
+      theme(legend.position = "top")
   })
   
   output$data_table <- renderDataTable({
     if (input$show_table) {
       brushedPoints(RawData, brush = input$plot_brush) %>%
-        select(Name, Sex, Age, Embarked, Total_Family_Members, Survivor,Passenger_class)
+        select(Name, Sex, Age, Embarked, Total_Family_Members, Survivor, Passenger_class)
     }
   })
   
